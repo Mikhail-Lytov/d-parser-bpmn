@@ -1,0 +1,8 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://${SPRING_DATASOURCE_ADDRESS}/${SPRING_DATASOURCE_NAME}
+    username: ${SPRING_DATASOURCE_USERNAME}
+    password: ${SPRING_DATASOURCE_PASSWORD}
+springdoc:
+  swagger-ui:
+    enabled: ${SWAGGER_ENABLED}

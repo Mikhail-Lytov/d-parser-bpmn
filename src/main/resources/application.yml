@@ -1,1 +1,30 @@
-spring.application.name=d-parser-bpmn
+
+spring:
+  application:
+    name: d-parser
+  task:
+    execution:
+      pool:
+        core-size: 5
+        max-size: 10
+        queue-capacity: 100
+  datasource:
+    driver-class-name: org.postgresql.Driver
+    hikari:
+      maximum-pool-size: 5
+      minimum-idle: 2
+  liquibase:
+    default-schema: public
+    change-log: classpath:db/changelog-master.xml
+
+
+springdoc:
+  swagger-ui:
+    operationsSorter: method
+    path: /swagger
+    tags-sorter: alpha
+  api-docs:
+    path: /api-docs
+
+server:
+  port: 8181
