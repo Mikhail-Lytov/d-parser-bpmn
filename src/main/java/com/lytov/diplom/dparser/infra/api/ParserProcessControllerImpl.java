@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
+import java.util.UUID;
 
 @RestController
 @RequiredArgsConstructor
@@ -15,7 +16,7 @@ public class ParserProcessControllerImpl implements ParserProcessController {
 
     private final ParserProcessService service;
     @Override
-    public ResponseEntity<List<Component>> parse(MultipartFile file) {
-        return ResponseEntity.ok(service.parserProcess(file));
+    public ResponseEntity<List<Component>> parse(UUID fileId) {
+        return ResponseEntity.ok(service.parserProcess(fileId));
     }
 }
