@@ -1,16 +1,25 @@
 package com.lytov.diplom.dparser.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.lytov.diplom.dparser.configuration.rabbit.DCoreRMQConfig;
+import com.lytov.diplom.dparser.configuration.rabbit.RabbitConfiguration;
 import com.lytov.diplom.dparser.domain.enums.EdgeType;
 import com.lytov.diplom.dparser.domain.enums.NodeType;
 import com.lytov.diplom.dparser.external.sppr_bd.SpprBdConnector;
 import com.lytov.diplom.dparser.service.api.BpmnToGraphParser;
 import com.lytov.diplom.dparser.service.dto.BpmnGraph;
+import com.lytov.diplom.dparser.service.dto.ResultBpmnParserGraphDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.camunda.bpm.model.bpmn.Bpmn;
 import org.camunda.bpm.model.bpmn.BpmnModelInstance;
 import org.camunda.bpm.model.bpmn.instance.*;
 import org.camunda.bpm.model.xml.instance.ModelElementInstance;
+import org.springframework.amqp.core.Message;
+import org.springframework.amqp.core.MessageBuilder;
+import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
@@ -33,8 +42,10 @@ public class BpmnToGraphParserImpl implements BpmnToGraphParser {
 
     private final SpprBdConnector spprBdConnector;
     private final RestTemplate restTemplate;
+    private final RabbitTemplate rabbitTemplate;
+    private final ObjectMapper objectMapper;
 
-    public BpmnGraph createGraph(UUID fileId) throws FileNotFoundException {
+    public BpmnGraph createGraph(UUID fileId, UUID processId) throws FileNotFoundException, JsonProcessingException {
 
         String downloadUrl = spprBdConnector.getDownloadUrl(fileId);
 
@@ -61,7 +72,22 @@ public class BpmnToGraphParserImpl implements BpmnToGraphParser {
             return null;
         }
 
-        return this.parse(new FileInputStream(localFile));
+        BpmnGraph bpmnGraph = this.parse(new FileInputStream(localFile));
+
+        ResultBpmnParserGraphDto request = new ResultBpmnParserGraphDto(processId, bpmnGraph);
+
+        Message message = MessageBuilder
+                .withBody(objectMapper.writeValueAsBytes(request))
+                .setContentType(MessageProperties.CONTENT_TYPE_JSON)
+                .build();
+
+        rabbitTemplate.convertAndSend(
+                DCoreRMQConfig.FROM_CORE_SECOND_PARS_RESULT_EXCHANGE,
+                "",
+                message
+
+        );
+        return null;
 
     }
 

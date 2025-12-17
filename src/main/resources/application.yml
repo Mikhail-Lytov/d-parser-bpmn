@@ -16,6 +16,16 @@ spring:
   liquibase:
     default-schema: public
     change-log: classpath:db/changelog-master.xml
+  rabbitmq:
+    listener:
+      simple:
+        retry:
+          enabled: true
+          max-attempts: 3
+          initial-interval: 1000
+          max-interval: 300000
+          multiplier: 2.0
+        prefetch: 1
 
 
 springdoc:
