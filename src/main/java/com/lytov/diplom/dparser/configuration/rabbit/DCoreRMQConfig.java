@@ -12,6 +12,10 @@ public class DCoreRMQConfig {
     public static final String FROM_CORE_SECOND_PARS_RESULT_EXCHANGE = "d-core.second-pars-result.exchange";
     public static final String FROM_CORE_SECOND_PARS_RESULT_QUEUE = "d-core.second-pars-result.queue";
 
+    public static final String FROM_SPPR_CREATE_GRAPH_EXCHANGE = "d-sppr.create-graph.exchange";
+
+    public static final String FROM_SPPR_CREATE_GRAPH_QUEUE = "d-sppr.create-graph.queue";
+
     @Bean
     public FanoutExchange fromCoreSecondParsResultExchange() {
         return new FanoutExchange(FROM_CORE_SECOND_PARS_RESULT_EXCHANGE);
@@ -30,5 +34,25 @@ public class DCoreRMQConfig {
         return BindingBuilder
                 .bind(fromCoreSecondParsResultQueue)
                 .to(fromCoreSecondParsResultExchange);
+    }
+
+    @Bean
+    public FanoutExchange fromSpprCreateGraphExchange() {
+        return new FanoutExchange(FROM_SPPR_CREATE_GRAPH_EXCHANGE);
+    }
+
+    @Bean
+    public Queue fromSpprCreateGraphQueue() {
+        return new Queue(FROM_SPPR_CREATE_GRAPH_QUEUE);
+    }
+
+    @Bean
+    public Binding fromSpprCreateGraphBinding(
+            FanoutExchange fromSpprCreateGraphExchange,
+            Queue fromSpprCreateGraphQueue
+    ) {
+        return BindingBuilder
+                .bind(fromSpprCreateGraphQueue)
+                .to(fromSpprCreateGraphExchange);
     }
 }

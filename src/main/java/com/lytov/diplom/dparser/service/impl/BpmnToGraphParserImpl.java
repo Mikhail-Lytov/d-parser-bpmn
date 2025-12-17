@@ -3,12 +3,12 @@ package com.lytov.diplom.dparser.service.impl;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.lytov.diplom.dparser.configuration.rabbit.DCoreRMQConfig;
-import com.lytov.diplom.dparser.configuration.rabbit.RabbitConfiguration;
 import com.lytov.diplom.dparser.domain.enums.EdgeType;
 import com.lytov.diplom.dparser.domain.enums.NodeType;
 import com.lytov.diplom.dparser.external.sppr_bd.SpprBdConnector;
 import com.lytov.diplom.dparser.service.api.BpmnToGraphParser;
 import com.lytov.diplom.dparser.service.dto.BpmnGraph;
+import com.lytov.diplom.dparser.service.dto.RequestCreateGraph;
 import com.lytov.diplom.dparser.service.dto.ResultBpmnParserGraphDto;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -19,10 +19,12 @@ import org.camunda.bpm.model.xml.instance.ModelElementInstance;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageBuilder;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.amqp.rabbit.annotation.RabbitListener;
 import org.springframework.amqp.rabbit.core.RabbitTemplate;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.ResponseEntity;
+import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.stereotype.Service;
 import org.springframework.web.client.RestTemplate;
 import org.springframework.web.util.UriComponentsBuilder;
@@ -45,7 +47,16 @@ public class BpmnToGraphParserImpl implements BpmnToGraphParser {
     private final RabbitTemplate rabbitTemplate;
     private final ObjectMapper objectMapper;
 
-    public BpmnGraph createGraph(UUID fileId, UUID processId) throws FileNotFoundException, JsonProcessingException {
+    @RabbitListener(queues = DCoreRMQConfig.FROM_SPPR_CREATE_GRAPH_QUEUE)
+    public void createGraphListener(@Payload RequestCreateGraph request) {
+        try {
+            createGraph(request.getFileId(), request.getProcessId());
+        } catch (Exception e) {
+            log.error(e.getMessage());
+        }
+    }
+
+    public void createGraph(UUID fileId, UUID processId) throws FileNotFoundException, JsonProcessingException {
 
         String downloadUrl = spprBdConnector.getDownloadUrl(fileId);
 
@@ -69,7 +80,7 @@ public class BpmnToGraphParserImpl implements BpmnToGraphParser {
             localFile = createFile(file.getBody());
         } catch (Exception e) {
             log.error(e.getMessage());
-            return null;
+            return;
         }
 
         BpmnGraph bpmnGraph = this.parse(new FileInputStream(localFile));
@@ -87,8 +98,6 @@ public class BpmnToGraphParserImpl implements BpmnToGraphParser {
                 message
 
         );
-        return null;
-
     }
 
     @Override
