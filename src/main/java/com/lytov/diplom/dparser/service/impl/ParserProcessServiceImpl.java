@@ -48,7 +48,7 @@ public class ParserProcessServiceImpl implements ParserProcessService {
                 .build(true)             // <- ВАЖНО: true = не кодировать заново
                 .toUri();
 
-        ResponseEntity<byte[]> file =restTemplate.exchange(
+        ResponseEntity<byte[]> file = restTemplate.exchange(
                 uri,
                 HttpMethod.GET,
                 null,

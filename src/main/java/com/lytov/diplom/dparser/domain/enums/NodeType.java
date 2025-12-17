@@ -1,0 +1,23 @@
+package com.lytov.diplom.dparser.domain.enums;
+
+public enum NodeType {
+    TASK,
+    USER_TASK,
+    SERVICE_TASK,
+    SCRIPT_TASK,
+    START_EVENT,
+    END_EVENT,
+    INTERMEDIATE_CATCH_EVENT,
+    INTERMEDIATE_THROW_EVENT,
+    BOUNDARY_EVENT,
+    EXCLUSIVE_GATEWAY,
+    PARALLEL_GATEWAY,
+    INCLUSIVE_GATEWAY,
+    EVENT_BASED_GATEWAY,
+    SUB_PROCESS,
+    CALL_ACTIVITY,
+    DATA_OBJECT_REF,
+    DATA_STORE_REF,
+    PARTICIPANT, // опционально
+    UNKNOWN
+}
