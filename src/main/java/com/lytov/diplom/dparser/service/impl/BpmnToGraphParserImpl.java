@@ -137,7 +137,8 @@ public class BpmnToGraphParserImpl implements BpmnToGraphParser {
             ItemAwareElement target = da.getTarget();
             if (target == null) continue;
 
-            String targetId = idOf(target);
+            ModelElementInstance instance = da.getParentElement();
+            String targetId = instance != null ? idOf(instance) : idOf(target);
             ensureNodeExists(graph, target);
 
             for (ItemAwareElement src : da.getSources()) {

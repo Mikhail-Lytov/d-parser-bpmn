@@ -10,6 +10,6 @@ import java.util.UUID;
 @NoArgsConstructor
 @AllArgsConstructor
 public class RequestCreateGraph {
-    private UUID processId;
     private UUID fileId;
+    private UUID processId;
 }
