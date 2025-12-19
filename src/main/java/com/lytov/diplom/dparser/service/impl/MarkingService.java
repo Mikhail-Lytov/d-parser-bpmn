@@ -36,17 +36,38 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.UUID;
 
-import static org.yaml.snakeyaml.nodes.Tag.SEQ;
+import java.util.concurrent.atomic.AtomicLong;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class MarkingService {
 
+    /**
+     * Счётчик для генерации уникальных id.
+     * Ранее по ошибке использовался org.yaml.snakeyaml.nodes.Tag.SEQ,
+     * из-за чего id получались некорректными (и могли ломать сериализацию).
+     */
+    private static final AtomicLong SEQ = new AtomicLong(0);
+
     private final SpprBdConnector spprBdConnector;
     private final RestTemplate restTemplate;
 
+    /**
+     * Старый метод оставлен для совместимости.
+     * Он создаёт размеченный BPMN во временном файле и пишет путь в лог.
+     */
     public void marking(AnalyzeRequest request) {
+        Path saved = markingToTempFile(request);
+        log.info("Marked BPMN saved to: {} ({} bytes)", saved, safeSize(saved));
+    }
+
+    /**
+     * Основной метод разметки: возвращает путь к созданному временному .bpmn файлу.
+     * Это устраняет типовую причину "0 KB" (когда вызывающий код создаёт файл сам,
+     * но MarkingService в него ничего не записывает).
+     */
+    public Path markingToTempFile(AnalyzeRequest request) {
         String downloadUrl = spprBdConnector.getDownloadUrl(request.getFileId());
 
         URI uri = UriComponentsBuilder
@@ -61,15 +82,16 @@ public class MarkingService {
                 byte[].class
         );
 
-        String contentDisposition = file.getHeaders()
-                .getFirst(HttpHeaders.CONTENT_DISPOSITION);
+        byte[] sourceBytes = file.getBody();
+        if (sourceBytes == null || sourceBytes.length == 0) {
+            throw new IllegalStateException("Downloaded BPMN is empty for fileId=" + request.getFileId());
+        }
 
-        File localFile = null;
+        File localFile;
         try {
-            localFile = createFile(file.getBody());
+            localFile = createFile(sourceBytes);
         } catch (Exception e) {
-            log.error(e.getMessage());
-            return;
+            throw new IllegalStateException("Failed to create local temp BPMN file", e);
         }
 
         BpmnModelInstance model = Bpmn.readModelFromFile(localFile);
@@ -86,16 +108,26 @@ public class MarkingService {
             }
         }
 
-        Path savePath = Paths.get("/Users/mihaillytov/Desktop/Диплом/реализация/backend/d-sppr-parent",
-                UUID.randomUUID() + ".bpmn");
-
-        try (OutputStream out = Files.newOutputStream(savePath)) {
-            Bpmn.writeModelToStream(out, model);
+        try {
+            Path savePath = Paths.get("/Users/mihaillytov/Desktop/Диплом/реализация/backend/d-sppr-parent",
+                    UUID.randomUUID() + ".bpmn");
+            try (OutputStream out = Files.newOutputStream(savePath)) {
+                Bpmn.writeModelToStream(out, model);
+            }
+            return savePath;
         } catch (Exception e) {
-            e.printStackTrace();
+            throw new IllegalStateException("Failed to write marked BPMN", e);
         }
+    }
 
-        System.out.println("Saved to: " + savePath);
+    /** Удобный вариант, если нужно вернуть файл в HTTP-ответе как байты. */
+    public byte[] markingToBytes(AnalyzeRequest request) {
+        Path p = markingToTempFile(request);
+        try {
+            return Files.readAllBytes(p);
+        } catch (IOException e) {
+            throw new IllegalStateException("Failed to read marked BPMN bytes", e);
+        }
     }
 
     private static void markNode(
@@ -135,7 +167,7 @@ public class MarkingService {
         ModelElementInstance container = findOwningProcessOrSubProcess(host);
 
         BoundaryEvent be = model.newInstance(BoundaryEvent.class);
-        be.setId("RiskBoundary_" + host.getId() + "_" + shortId(riskId) + "_" + SEQ);
+        be.setId("RiskBoundary_" + host.getId() + "_" + shortId(riskId) + "_" + SEQ.incrementAndGet());
         be.setName("Риск " + shortId(riskId));
         be.setAttachedTo(host);
         be.setCancelActivity(false);
@@ -159,8 +191,12 @@ public class MarkingService {
             String refId,
             String riskId
     ) {
-        // 1) пробуем найти как есть
-        ModelElementInstance el = model.getModelElementById(refId);
+        // refId иногда приходит составным: "EdgeId:Source->Target".
+        // Для поиска элемента в модели нам нужен реальный id (обычно до двоеточия).
+        String elementId = normalizeElementId(refId);
+
+        // 1) пробуем найти по нормализованному id
+        ModelElementInstance el = model.getModelElementById(elementId);
 
         BaseElement attachTo = null;
 
@@ -168,7 +204,7 @@ public class MarkingService {
             attachTo = pickAttachPointForEdge(be);
         }
 
-        // 2) если refId составной: "...->Target"
+        // 2) если refId составной: "...->Target" — пробуем прикрепить к target
         if (attachTo == null) {
             String targetId = parseTargetId(refId);
             if (targetId != null) {
@@ -177,7 +213,7 @@ public class MarkingService {
             }
         }
 
-        // 3) fallback: если есть source до "->"
+        // 3) fallback: если есть source до "->" — пробуем прикрепить к source
         if (attachTo == null) {
             String sourceId = parseSourceId(refId);
             if (sourceId != null) {
@@ -230,7 +266,7 @@ public class MarkingService {
 
         // 1) TextAnnotation
         TextAnnotation ta = model.newInstance(TextAnnotation.class);
-        ta.setId("RiskNote_" + target.getId() + "_" + SEQ);
+        ta.setId("RiskNote_" + target.getId() + "_" + SEQ.incrementAndGet());
 
         Text txt = model.newInstance(Text.class);
         txt.setTextContent("Риск: " + riskText);
@@ -241,7 +277,7 @@ public class MarkingService {
         // 2) Association (target -> annotation)
         org.camunda.bpm.model.bpmn.instance.Association assoc =
                 model.newInstance(org.camunda.bpm.model.bpmn.instance.Association.class);
-        assoc.setId("RiskAssoc_" + target.getId() + "_" + SEQ);
+        assoc.setId("RiskAssoc_" + target.getId() + "_" + SEQ.incrementAndGet());
         assoc.setSource(target);
         assoc.setTarget(ta);
 
@@ -297,7 +333,7 @@ public class MarkingService {
 
         if (diagrams.isEmpty()) {
             diagram = model.newInstance(BpmnDiagram.class);
-            diagram.setId("BpmnDiagram_" + SEQ);
+            diagram.setId("BpmnDiagram_" + SEQ.incrementAndGet());
             model.getDefinitions().addChildElement(diagram);
         } else {
             diagram = diagrams.iterator().next();
@@ -306,7 +342,7 @@ public class MarkingService {
         BpmnPlane plane = diagram.getBpmnPlane();
         if (plane == null) {
             plane = model.newInstance(BpmnPlane.class);
-            plane.setId("BpmnPlane_" + SEQ);
+            plane.setId("BpmnPlane_" + SEQ.incrementAndGet());
 
             Process p = firstProcess(model);
             if (p != null) plane.setBpmnElement(p);
@@ -342,7 +378,7 @@ public class MarkingService {
 
     private static BpmnShape createShape(BpmnModelInstance model, BpmnPlane plane, BaseElement element, Bounds bounds) {
         BpmnShape shape = model.newInstance(BpmnShape.class);
-        shape.setId("DI_Shape_" + element.getId() + "_" + SEQ);
+        shape.setId("DI_Shape_" + element.getId() + "_" + SEQ.incrementAndGet());
         shape.setBpmnElement(element);
         shape.setBounds(bounds);
         plane.addChildElement(shape);
@@ -354,7 +390,7 @@ public class MarkingService {
             double x1, double y1, double x2, double y2
     ) {
         BpmnEdge edge = model.newInstance(BpmnEdge.class);
-        edge.setId("DI_Edge_" + element.getId() + "_" + SEQ);
+        edge.setId("DI_Edge_" + element.getId() + "_" + SEQ.incrementAndGet());
         edge.setBpmnElement(element);
 
         Waypoint w1 = model.newInstance(Waypoint.class);
@@ -391,6 +427,18 @@ public class MarkingService {
 
     // -------------------- PARSING HELPERS --------------------
 
+    /**
+     * refId иногда приходит в "расширенном" виде:
+     *   "ElementId:Source->Target"
+     * Для поиска по model.getModelElementById нужен именно ElementId.
+     */
+    private static String normalizeElementId(String refId) {
+        if (refId == null) return null;
+        int colon = refId.indexOf(':');
+        String id = (colon >= 0) ? refId.substring(0, colon) : refId;
+        return id.trim();
+    }
+
     /** refId вида "DataInputAssociation_X:Source->Target" */
     private static String parseTargetId(String compositeId) {
         if (compositeId == null) return null;
@@ -416,6 +464,14 @@ public class MarkingService {
     private static String shortId(String uuid) {
         if (uuid == null) return "NA";
         return uuid.length() <= 8 ? uuid : uuid.substring(0, 8);
+    }
+
+    private static long safeSize(Path path) {
+        try {
+            return Files.size(path);
+        } catch (Exception e) {
+            return -1L;
+        }
     }
     private File createFile(byte[] data) throws IOException {
         String tmpdir = System.getProperty("java.io.tmpdir");
