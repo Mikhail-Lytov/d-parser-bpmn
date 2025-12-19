@@ -16,6 +16,10 @@ public class DCoreRMQConfig {
 
     public static final String FROM_SPPR_CREATE_GRAPH_QUEUE = "d-sppr.create-graph.queue";
 
+    public static final String FROM_SPPR_MARKING_EXCHANGE = "d-sppr.marking.exchange";
+
+    public static final String FROM_SPPR_MARKING_QUEUE = "d-sppr.marking.queue";
+
     @Bean
     public FanoutExchange fromCoreSecondParsResultExchange() {
         return new FanoutExchange(FROM_CORE_SECOND_PARS_RESULT_EXCHANGE);
@@ -54,5 +58,25 @@ public class DCoreRMQConfig {
         return BindingBuilder
                 .bind(fromSpprCreateGraphQueue)
                 .to(fromSpprCreateGraphExchange);
+    }
+
+    @Bean
+    public FanoutExchange fromCoreMarkingExchange() {
+        return new FanoutExchange(FROM_SPPR_MARKING_EXCHANGE);
+    }
+
+    @Bean
+    public Queue fromCoreMarkingQueue() {
+        return new Queue(FROM_SPPR_MARKING_QUEUE);
+    }
+
+    @Bean
+    public Binding fromCoreMarkingBinding(
+            FanoutExchange fromCoreMarkingExchange,
+            Queue fromCoreMarkingQueue
+    ) {
+        return BindingBuilder
+                .bind(fromCoreMarkingQueue)
+                .to(fromCoreMarkingExchange);
     }
 }
